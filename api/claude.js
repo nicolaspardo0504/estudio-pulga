@@ -16,10 +16,11 @@ export default async function handler(req, res) {
       }
     );
     const data = await r.json();
+    console.log("RESPUESTA CRUDA DE GEMINI:", JSON.stringify(data));
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     return res.status(200).json({ text });
   } catch (e) {
     console.error("ERROR EN EL PROXY:", e);
     return res.status(500).json({ error: "proxy_error", detalle: String(e) });
   }
-}
+}	
