@@ -426,7 +426,6 @@ function Sala({ award, setFocus }) {
 
   // sound engine
   const stopSound = () => { try { srcRef.current && srcRef.current.stop(); } catch {} srcRef.current = null; };
-  const bufferCacheRef = useRef({});
 const startSound = async (type) => {
   if (type === "off") { stopSound(); return; }
   try {
