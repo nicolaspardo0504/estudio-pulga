@@ -95,9 +95,10 @@ const PRESETS = [
 ];
 const SOUNDS = [
   { id: "off", label: "Silencio", icon: VolumeX },
-  { id: "brown", label: "Marrón", icon: Wind },
-  { id: "white", label: "Blanco", icon: Wind },
-  { id: "soft", label: "Suave", icon: Wind },
+  { id: "olas", label: "Olas del mar", icon: Wind, file: "/sounds/olas.mp3" },
+  { id: "fogata", label: "Fogata", icon: Wind, file: "/sounds/fogata.mp3" },
+  { id: "bosque", label: "Bosque", icon: Wind, file: "/sounds/bosque.mp3" },
+  { id: "viento", label: "Viento suave", icon: Wind, file: "/sounds/viento.mp3" },
 ];
 const RITUAL = [
   "Deja el teléfono en OTRA habitación (no basta silenciarlo)",
@@ -406,6 +407,7 @@ function Sala({ award, setFocus }) {
   const [running, setRunning] = useState(false);
   const [cycle, setCycle] = useState(0);
   const ctxRef = useRef(null), srcRef = useRef(null), gainRef = useRef(null), rootRef = useRef(null);
+  const bufferCacheRef = useRef({});
   const preset = PRESETS.find(p => p.id === presetId);
   const ritualDone = ritual.filter(Boolean).length;
 
@@ -419,21 +421,34 @@ function Sala({ award, setFocus }) {
       const nc = cycle + 1; setCycle(nc);
       const long = nc % 4 === 0; setPhase(long ? "long" : "break");
       setSecs((long ? preset.long : preset.brk) * 60);
-    } else { setPhase("focus"); setSecs(preset.focus * 60); }
+    } else { award(5); setPhase("focus"); setSecs(preset.focus * 60); }
   }, [secs]); // eslint-disable-line
 
   // sound engine
   const stopSound = () => { try { srcRef.current && srcRef.current.stop(); } catch {} srcRef.current = null; };
-  const startSound = (type) => {
-    if (type === "off") { stopSound(); return; }
-    try {
-      if (!ctxRef.current) { const AC = window.AudioContext || window.webkitAudioContext; ctxRef.current = new AC(); gainRef.current = ctxRef.current.createGain(); gainRef.current.connect(ctxRef.current.destination); }
-      ctxRef.current.resume && ctxRef.current.resume();
-      gainRef.current.gain.value = vol;
-      stopSound();
-      const src = ctxRef.current.createBufferSource(); src.buffer = makeBuffer(ctxRef.current, type); src.loop = true; src.connect(gainRef.current); src.start(); srcRef.current = src;
-    } catch {}
-  };
+  const bufferCacheRef = useRef({});
+const startSound = async (type) => {
+  if (type === "off") { stopSound(); return; }
+  try {
+    if (!ctxRef.current) { const AC = window.AudioContext || window.webkitAudioContext; ctxRef.current = new AC(); gainRef.current = ctxRef.current.createGain(); gainRef.current.connect(ctxRef.current.destination); }
+    ctxRef.current.resume && ctxRef.current.resume();
+    gainRef.current.gain.value = vol;
+    stopSound();
+    const sound = SOUNDS.find(s => s.id === type);
+    let buffer = bufferCacheRef.current[type];
+    if (!buffer) {
+      const res = await fetch(sound.file);
+      const arr = await res.arrayBuffer();
+      buffer = await ctxRef.current.decodeAudioData(arr);
+      bufferCacheRef.current[type] = buffer;
+    }
+    const src = ctxRef.current.createBufferSource();
+    src.buffer = buffer; src.loop = true; src.connect(gainRef.current); src.start();
+    srcRef.current = src;
+  } catch (e) {
+    console.error("No se pudo cargar el sonido:", e);
+  }
+};
   useEffect(() => () => stopSound(), []);
   useEffect(() => { if (gainRef.current) gainRef.current.gain.value = vol; }, [vol]);
   const chooseSound = (id) => { setSound(id); startSound(id); };
@@ -1166,6 +1181,19 @@ function Flashcards({ award }) {
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [studySecs, setStudySecs] = useState(0);
+  const [milestones, setMilestones] = useState({ m10: false, m20: false, m30: false });
+
+  useEffect(() => {
+    if (mode !== "study") return;
+    const id = setInterval(() => setStudySecs(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [mode]);
+  useEffect(() => {
+    if (studySecs >= 600 && !milestones.m10) { award(15); setMilestones(m => ({ ...m, m10: true })); }
+    if (studySecs >= 1200 && !milestones.m20) { award(15); setMilestones(m => ({ ...m, m20: true })); }
+    if (studySecs >= 1800 && !milestones.m30) { award(20); setMilestones(m => ({ ...m, m30: true })); }
+  }, [studySecs]); // eslint-disable-line
 
   const areaName = AREAS.find(a => a.id === area).name;
   const generate = async () => {
